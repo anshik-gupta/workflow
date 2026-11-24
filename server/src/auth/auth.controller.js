@@ -1,0 +1,105 @@
+import pool from "../config/database.js";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+
+const register = async (req, res, next) => {
+    try {
+        const { name, email, password } = req.body;
+
+        // Check whether the email already exists
+        const [existingUsers] = await pool.execute(
+            "SELECT id FROM users WHERE email = ?",
+            [email]
+        );
+
+        if (existingUsers.length > 0) {
+            return res.status(409).json({
+                success: false,
+                message: "Email is already registered"
+            });
+        }
+
+        // Hash password
+        const passwordHash = await bcrypt.hash(password, 12);
+
+        // Insert user
+        const [result] = await pool.execute(
+            `INSERT INTO users (name, email, password_hash)
+             VALUES (?, ?, ?)`,
+            [name, email, passwordHash]
+        );
+
+        return res.status(201).json({
+            success: true,
+            message: "User registered successfully",
+            user: {
+                id: result.insertId,
+                name,
+                email
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+const login = async (req, res, next) => {
+    try {
+        const { email, password } = req.body;
+
+        // Find user
+        const [users] = await pool.execute(
+            "SELECT id, name, email, password_hash FROM users WHERE email = ?",
+            [email]
+        );
+
+        if (users.length === 0) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password"
+            });
+        }
+
+        const user = users[0];
+
+        // Compare password
+        const isPasswordValid = await bcrypt.compare(
+            password,
+            user.password_hash
+        );
+
+        if (!isPasswordValid) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid email or password"
+            });
+        }
+
+        // Generate JWT
+        const token = jwt.sign(
+            { userId: user.id },
+            process.env.JWT_SECRET,
+            { expiresIn: "15m" }
+        );
+
+        return res.status(200).json({
+            success: true,
+            message: "Login successful",
+            token,
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email
+            }
+        });
+
+    } catch (error) {
+        next(error);
+    }
+};
+
+export{
+    register,
+    login
+};
