@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
-import app from "./app.js";
 
 dotenv.config();
 
+const { default: app } = await import("./app.js");
 const { default: pool } = await import("./config/database.js");
 
 try {
